@@ -49,21 +49,34 @@ def scrape_hlj():
         response = requests.get(url, headers=headers)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # NOTE: You may need to inspect HLJ's current HTML to update these class names.
-        # This is a generic representation of product cards.
-        products = soup.find_all("div", class_="product-item") 
+        # 1. The main container from your first screenshot
+        products = soup.find_all("div", class_="search-widget-block") 
         
         for p in products:
             try:
-                name_tag = p.find("h2", class_="product-name").find("a")
-                name = name_tag.text.strip()
-                item_url = "https://www.hlj.com" + name_tag['href']
-                image = p.find("img")['src']
+                # 2. Extract Link & Image (from item-img-wrapper)
+                link_tag = p.find("a", class_="item-img-wrapper")
+                if not link_tag:
+                    continue # Skip if this block isn't a real product
+                    
+                item_url = "https://www.hlj.com" + link_tag['href']
                 
-                # Check for an "In Stock" badge or lack of an "Out of Stock" badge
-                status_tag = p.find("div", class_="stock-status")
-                is_in_stock = "In Stock" in status_tag.text if status_tag else False
+                img_tag = link_tag.find("img")
+                image = img_tag['src'] if img_tag else ""
                 
+                # 3. Extract Name
+                name_tag = p.find(class_="product-item-name")
+                name = name_tag.text.strip() if name_tag else "Unknown Gunpla"
+                
+                # 4. Check Stock Status 
+                # Your screenshot shows available items use the "release green" class
+                stock_div = p.find("div", class_="stock")
+                is_in_stock = False
+                
+                if stock_div and stock_div.find("div", class_="release green"):
+                    is_in_stock = True
+                
+                # 5. Save to current_stock if available
                 if is_in_stock:
                     current_stock[item_url] = {
                         "name": name,
@@ -73,10 +86,10 @@ def scrape_hlj():
                         "status": "In Stock"
                     }
             except Exception as e:
-                continue # Skip items that fail to parse
+                print(f"Error parsing an item: {e}")
+                continue 
                 
     return current_stock
-
 def main():
     old_stock = load_previous_stock()
     new_stock = scrape_hlj()
